@@ -1,0 +1,116 @@
+services:
+  gitlab-runner:
+    image: gitlab-runner:latest
+    restart: always
+    environment:
+      CI_SERVER_URL: "https://git.fpt.work"
+      REGISTRATION_TOKEN: "xF5qituWmNJu5seZZu99"
+      REGISTER_NON_INTERACTIVE: "true"
+      RUNNER_EXECUTOR: "shell"
+      RUNNER_SHELL: "bash"
+      REGISTER_RUN_UNTAGGED: "true"
+      REGISTER_LOCKED: "false"
+      REGISTER_ACCESS_LEVEL: "not_protected"
+      RUNNER_REQUEST_CONCURRENCY: "10"
+      VAULT_ADDR: "http://118.68.218.94:8200"
+      VAULT_TOKEN: "s.lDj0cAqtElwdsg5BoDrmiUJS"
+    volumes:
+      - ./config.toml:/etc/gitlab-runner/config.toml
+      - ./.kube:/home/gitlab-runner/.kube
+      - ./.docker:/home/gitlab-runner/.docker
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "registry.fpt.work:10.0.1.100"
+      - "apis.service.staging.fwork:118.69.18.109"
+    networks:
+      - gitlab-runner
+networks:
+  gitlab-runner:
+
+
+#========= ./.docker/config.json
+{
+        "auths": {
+                "registry.fpt.work": {
+                        "auth": "YWRtaW46RldvcmtAMTIz"
+                }
+        },
+        "HttpHeaders": {
+                "User-Agent": "Docker-Client/19.03.6 (linux)"
+        }
+}
+
+
+#========== /.kube
+abc.crt
+admin-key.pem
+admin-key-staging.pem
+admin.pem
+admin-staging.pem
+cache
+config
+config.bak.merge
+config.dev
+config-stg
+config-stg.bak
+http-cache
+
+
+#=============== config.toml 
+listen_address = ":9252"
+concurrent = 10
+check_interval = 3
+log_level = "info"
+log_format = "text"
+
+[session_server]
+  session_timeout = 1800
+
+[[runners]]
+  name = "df295ee47d1c"
+  request_concurrency = 10
+  url = "https://git.fpt.work"
+  token = "WmghDsX9MuYhvXXTYytc"
+  executor = "shell"
+  shell = "bash"
+  [runners.custom_build_dir]
+  [runners.cache]
+    [runners.cache.s3]
+    [runners.cache.gcs]    
+
+
+#============ Dockerfile
+FROM node:13.12.0-alpine3.10
+
+ARG RUNNER_VERSION=latest
+ARG DOCKER_VERSION=19.03.6
+ARG HELM_VERSION=3.1.0
+
+LABEL org.label-schema.name="gitlab-runner" \
+      org.label-schema.description="Gitlab Runner" \
+      org.label-schema.version="gitlab-runner:${RUNNER_VERSION}" \
+      maintainer="tainv18@fpt.com.vn"
+
+VOLUME [/etc/gitlab-runner /home/gitlab-runner]
+
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN addgroup -g 2000 gitlab-runner \
+                && adduser -D -g "Gitlab Runner" -u 2000 -G gitlab-runner -h /home/gitlab-runner gitlab-runner \
+                && apk add --no-cache ca-certificates git bash curl \
+                && curl -L https://gitlab-runner-downloads.s3.amazonaws.com/${RUNNER_VERSION}/binaries/gitlab-runner-linux-amd64 \
+                -o /usr/local/bin/gitlab-runner \
+                && chmod +x /usr/local/bin/gitlab-runner \
+                && curl -LO https://download.docker.com/linux/static/stable/x86_64/docker-${DOCKER_VERSION}.tgz \
+                && tar xf docker-${DOCKER_VERSION}.tgz --strip 1 \
+                -C /usr/local/bin docker/docker \
+                && rm -f docker-${DOCKER_VERSION}.tgz \
+                && curl -LO https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz \
+                && tar xf helm-v${HELM_VERSION}-linux-amd64.tar.gz --strip 1 \
+                -C /usr/local/bin linux-amd64/helm \
+                && rm -f helm-v${HELM_VERSION}-linux-amd64.tar.gz
+
+ENTRYPOINT ["docker-entrypoint.sh"]
+
+CMD ["auto-register"]    

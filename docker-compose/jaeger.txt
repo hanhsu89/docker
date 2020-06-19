@@ -1,0 +1,72 @@
+docker-compose.yml 
+version: '3.7'
+
+x-jaeger-storage: &storage
+  environment:
+    SPAN_STORAGE_TYPE: "elasticsearch"
+
+x-jaeger-common: &common
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - jaeger
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.6.1
+    container_name: elasticsearch
+    restart: always
+    << : *common
+    environment:
+      discovery.type: "single-node"
+    volumes:
+      - /data/elasticsearch:/usr/share/elasticsearch/data
+    expose:
+      - "9200"
+
+  jaeger-collector:
+    image: jaeger-collector
+    container_name: jaeger-collector
+    restart: always
+    << : *storage
+    << : *common
+    volumes:
+      - ./collector.yaml:/etc/jaeger/collector.yaml
+    depends_on:
+      - elasticsearch
+    links:
+      - elasticsearch
+    ports:
+      - "14268:14268"
+
+  jaeger-query:
+    image: jaeger-query
+    container_name: jaeger-query
+    restart: always
+    << : *storage
+    << : *common
+    volumes:
+      - ./query.yaml:/etc/jaeger/query.yaml
+    depends_on:
+      - elasticsearch
+    links:
+      - elasticsearch
+    ports:
+      - "16686:16686"
+
+networks:
+
+
+#=====================
+cat collector.yaml 
+es:
+  server-urls: http://elasticsearch:9200
+collector:
+  http-port: 14268
+
+
+#=====================
+cat query.yaml 
+es:
+  server-urls: http://elasticsearch:9200
